@@ -20,6 +20,7 @@ import {
   loadGame,
   newGame,
   prepDeltas,
+  prepDiscount,
   saveGame,
   weeksLeft,
 } from "@/lib/game";
@@ -255,7 +256,7 @@ export default function Page() {
   function finishQuiz(code: string, passed: boolean, correct: number, title: string) {
     if (!game) return;
     const g = advanceWeek(game, "prep", {
-      deltas: prepDeltas(code, passed),
+      deltas: prepDeltas(code, passed, game.stats),
       kp: code,
       kpTitle: title,
       passed,
@@ -536,9 +537,12 @@ function Hub({
       <div className="rounded-2xl p-4 mb-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
         <StatBars stats={game.stats} />
       </div>
-      <div className="rounded-2xl p-4 mb-5" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div className="rounded-2xl p-4 mb-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
         <DomainBars masteredKPs={game.masteredKPs} />
       </div>
+      <p className="text-[11px] leading-relaxed opacity-55 mb-5 px-1">
+        💡 結局看的是你「備課進修」精通知識點的<b>廣度 × 深度</b>（上面五領域的格數），不是數值高低。數值高的好處是：該領域<b>備課更省能量</b>——先穩班、先安撫家長，之後攻那一塊更划算。
+      </p>
 
       {done ? (
         <div className="text-center">
@@ -557,9 +561,17 @@ function Hub({
             {DOMAINS.map((d) => {
               const remain = d.kps.filter((k) => !mastered.has(k.code));
               if (!remain.length) return null;
+              const disc = prepDiscount(game.stats, d.axis);
               return (
                 <div key={d.id}>
-                  <div className="text-xs mb-1" style={{ color: d.color }}>領域 {d.id}：{d.name}</div>
+                  <div className="text-xs mb-1 flex items-center gap-2" style={{ color: d.color }}>
+                    <span>領域 {d.id}：{d.name}</span>
+                    {disc > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full" style={{ background: "#e7f3ea", color: "#3f8f6b" }}>
+                        ⚡ 省力 −{disc} 能量
+                      </span>
+                    )}
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {remain.map((k) => (
                       <button

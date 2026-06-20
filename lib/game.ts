@@ -1,4 +1,4 @@
-import { ActionKind, GameMode, GameState, Stats, WeekReport } from "./types";
+import { ActionKind, AxisKey, GameMode, GameState, Stats, WeekReport } from "./types";
 import { ALL_KPS, domainOfKp } from "./domains";
 import { pickCall } from "./story";
 
@@ -62,17 +62,37 @@ export const ACTION_INFO: Record<
   rest: { label: "喘息充電", icon: "🌿", desc: "能量 ＋30（這週不進度）" },
 };
 
-// 備課進修（答完題）的能力值變化：依領域對應軸長能力
-export function prepDeltas(kp: string, passed: boolean): Partial<Stats> {
+// 能力軸 → 對應數值（grow 無對應數值：自我成長另有回能設計）
+const AXIS_STAT: Partial<Record<AxisKey, keyof Stats>> = {
+  teach: "teaching",
+  care: "classroom",
+  connect: "rapport",
+};
+
+// 加成機制：該領域對應數值越高，備課越省力（每 20 點省 2 能量，最多省 6）
+// → 「先穩班 / 先安撫家長」之後，攻該領域的進修真的更划算，把玩家的策略直覺變成有效。
+export function prepDiscount(stats: Stats, axis: AxisKey): number {
+  const key = AXIS_STAT[axis];
+  if (!key) return 0;
+  return Math.min(6, Math.floor(stats[key] / 20) * 2);
+}
+
+export function prepEnergyCost(stats: Stats, kp: string): number {
+  return PREP_COST - prepDiscount(stats, domainOfKp(kp).axis);
+}
+
+// 備課進修（答完題）的能力值變化：依領域對應軸長能力，能量耗用含加成折扣
+export function prepDeltas(kp: string, passed: boolean, stats: Stats): Partial<Stats> {
   const axis = domainOfKp(kp).axis;
-  const d: Partial<Stats> = { energy: -PREP_COST };
+  const cost = prepEnergyCost(stats, kp);
+  const d: Partial<Stats> = { energy: -cost };
   if (passed) {
     if (axis === "teach") d.teaching = 5;
     else if (axis === "care") d.classroom = 5;
     else if (axis === "connect") d.rapport = 5;
     else if (axis === "grow") {
-      // 自我成長：讀起來反而比較不耗、還回一點能量
-      d.energy = -PREP_COST + 4;
+      // 自我成長：讀起來反而比較不耗、還回一點能量（grow 無折扣，cost=PREP_COST）
+      d.energy = -cost + 4;
       d.teaching = 2;
     }
   } else {
