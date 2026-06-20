@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #fbf3e7;
+  --ink: #4a3a2c;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), "PingFang TC", "Noto Sans TC", sans-serif;
+}
