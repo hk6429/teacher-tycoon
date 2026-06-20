@@ -67,6 +67,9 @@ export interface WeekReport {
   event?: string; // 本週突發事件描述（若有）
 }
 
+// 遊戲模式：story＝英雄之旅劇情模式（有召喚/危機/高潮）；sandbox＝自由養成
+export type GameMode = "story" | "sandbox";
+
 export interface GameState {
   name: string;
   week: number; // 1-40
@@ -75,6 +78,11 @@ export interface GameState {
   log: WeekLog[];
   report?: WeekReport; // 最近一週的行動結果
   finished: boolean;
+  // 劇情模式專用（自由模式為 undefined）
+  mode?: GameMode;
+  call?: string; // 焦點難題 id（開場召喚）
+  ordealDone?: boolean; // 中點危機是否已觸發
+  ordealTier?: number; // 危機結果分級：2 撐過 / 1 勉強 / 0 低點
 }
 
 export interface WeekLog {

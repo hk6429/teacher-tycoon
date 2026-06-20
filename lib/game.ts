@@ -1,5 +1,6 @@
-import { ActionKind, GameState, Stats, WeekReport } from "./types";
+import { ActionKind, GameMode, GameState, Stats, WeekReport } from "./types";
 import { ALL_KPS, domainOfKp } from "./domains";
+import { pickCall } from "./story";
 
 export const TOTAL_WEEKS = 40; // 一學年
 export const QUIZ_SIZE = 6; // 每知識點題數
@@ -13,7 +14,7 @@ export const PREP_MIN_ENERGY = 15;
 
 const STORAGE_KEY = "teacher-tycoon-save";
 
-export function newGame(name: string): GameState {
+export function newGame(name: string, mode: GameMode = "story"): GameState {
   return {
     name,
     week: 1,
@@ -21,6 +22,8 @@ export function newGame(name: string): GameState {
     masteredKPs: [],
     log: [],
     finished: false,
+    mode,
+    call: mode === "story" ? pickCall() : undefined,
   };
 }
 

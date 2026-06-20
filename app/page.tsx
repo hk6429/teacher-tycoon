@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ActionKind, GameState, Question, Stats } from "@/lib/types";
+import { ActionKind, GameMode, GameState, Question, Stats } from "@/lib/types";
 import { DOMAINS, domainCounts, kpTitle } from "@/lib/domains";
 import { questionsForKP } from "@/lib/questions";
 import { judgeEnding, radarValues, abilityProfile, tendency } from "@/lib/endings";
@@ -14,6 +14,7 @@ import {
   TOTAL_KPS,
   TOTAL_WEEKS,
   advanceWeek,
+  applyDeltas,
   clearGame,
   isFinished,
   loadGame,
@@ -22,6 +23,13 @@ import {
   saveGame,
   weeksLeft,
 } from "@/lib/game";
+import {
+  ORDEAL_WEEK,
+  callById,
+  ordealResolve,
+  climaxResolve,
+  returnLine,
+} from "@/lib/story";
 
 /* ---------------- 樣式常數（繪本暖橙） ---------------- */
 const INK = "#4a3a2c";
@@ -180,7 +188,18 @@ function Radar({ values }: { values: number[] }) {
 }
 
 /* ---------------- 頁面主體 ---------------- */
-type Screen = "title" | "setup" | "hub" | "quiz" | "result" | "term" | "ending";
+type Screen =
+  | "title"
+  | "setup"
+  | "mode"
+  | "call"
+  | "hub"
+  | "quiz"
+  | "result"
+  | "ordeal"
+  | "term"
+  | "climax"
+  | "ending";
 
 // 期中評語觸發週（每滿一學期看一次暫定走向）
 const TERM_WEEKS = [11, 21, 31];
@@ -190,6 +209,7 @@ export default function Page() {
   const [screen, setScreen] = useState<Screen>("title");
   const [kp, setKp] = useState<string | null>(null);
   const [intro, setIntro] = useState(true);
+  const [pendingName, setPendingName] = useState("陳老師");
 
   useEffect(() => {
     const saved = loadGame();
@@ -199,11 +219,18 @@ export default function Page() {
     }
   }, []);
 
-  function start(name: string) {
-    const g = newGame(name.trim() || "陳老師");
+  // Setup 完成 → 進模式選擇
+  function chooseName(name: string) {
+    setPendingName(name.trim() || "陳老師");
+    setScreen("mode");
+  }
+
+  // 模式選定 → 開新局；劇情模式先看召喚，自由模式直接進 Hub
+  function start(mode: GameMode) {
+    const g = newGame(pendingName, mode);
     setGame(g);
     saveGame(g);
-    setScreen("hub");
+    setScreen(mode === "story" ? "call" : "hub");
   }
 
   function reset() {
@@ -240,11 +267,32 @@ export default function Page() {
     setScreen("result");
   }
 
-  function afterResult() {
-    if (!game) return;
-    if (isFinished(game)) return setScreen("ending");
-    if (TERM_WEEKS.includes(game.week)) return setScreen("term");
+  // 一週結束後的路由（劇情模式多了中點危機與高潮）
+  function route(g: GameState) {
+    if (isFinished(g)) return setScreen(g.mode === "story" ? "climax" : "ending");
+    if (g.mode === "story" && !g.ordealDone && g.week >= ORDEAL_WEEK)
+      return setScreen("ordeal");
+    if (TERM_WEEKS.includes(g.week)) return setScreen("term");
     setScreen("hub");
+  }
+
+  function afterResult() {
+    if (game) route(game);
+  }
+
+  // 中點危機結算：套用士氣獎勵、記錄分級，再續走原本路由
+  function resolveOrdeal() {
+    if (!game) return;
+    const { tier, reward } = ordealResolve(game);
+    const g: GameState = {
+      ...game,
+      stats: applyDeltas(game.stats, reward),
+      ordealDone: true,
+      ordealTier: tier,
+    };
+    setGame(g);
+    saveGame(g);
+    route(g);
   }
 
   if (intro) return <Intro onDone={() => setIntro(false)} />;
@@ -252,13 +300,17 @@ export default function Page() {
   return (
     <main className="mx-auto w-full max-w-md px-4 pb-16" style={{ color: INK }}>
       {screen === "title" && <Title onStart={() => setScreen("setup")} hasSave={!!game} onResume={() => setScreen(isFinished(game!) ? "ending" : "hub")} />}
-      {screen === "setup" && <Setup onStart={start} />}
+      {screen === "setup" && <Setup onStart={chooseName} />}
+      {screen === "mode" && <ModeSelect onPick={start} />}
+      {screen === "call" && game && <CallScreen game={game} onContinue={() => setScreen("hub")} />}
       {screen === "hub" && game && (
-        <Hub game={game} onPrep={startPrep} onAction={doAction} onReset={reset} onFinish={() => setScreen("ending")} />
+        <Hub game={game} onPrep={startPrep} onAction={doAction} onReset={reset} onFinish={() => route(game)} />
       )}
       {screen === "quiz" && game && kp && <Quiz kp={kp} onDone={finishQuiz} />}
       {screen === "result" && game && <Result game={game} onNext={afterResult} />}
+      {screen === "ordeal" && game && <OrdealScreen game={game} onNext={resolveOrdeal} />}
       {screen === "term" && game && <TermReview game={game} onNext={() => setScreen("hub")} />}
+      {screen === "climax" && game && <ClimaxScreen game={game} onNext={() => setScreen("ending")} />}
       {screen === "ending" && game && <EndingView game={game} onRestart={reset} />}
     </main>
   );
@@ -328,6 +380,117 @@ function Setup({ onStart }: { onStart: (name: string) => void }) {
           踏進教室
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ---------------- 模式選擇 ---------------- */
+function ModeSelect({ onPick }: { onPick: (m: GameMode) => void }) {
+  return (
+    <div className="pt-10">
+      <Scene bg="/scenes/hub.png">
+        <Narration>同樣是一學年，你想用哪一種方式走完它？</Narration>
+      </Scene>
+      <div className="mt-6 space-y-3">
+        <button
+          onClick={() => onPick("story")}
+          className="w-full text-left rounded-2xl p-5"
+          style={{ background: CARD, border: `2px solid ${PRIMARY}` }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-2xl">📖</span>
+            <span className="font-bold text-lg">劇情模式 · 英雄之旅</span>
+            <span className="text-[11px] px-2 py-0.5 rounded-full text-white" style={{ background: PRIMARY }}>推薦</span>
+          </div>
+          <p className="text-sm opacity-75 leading-relaxed">
+            開學就有一個「非你不可」的孩子或難題交到你手上。學期中會迎來一場危機，學年末見真章——你的每個取捨，都在決定你能不能接住他。
+          </p>
+        </button>
+        <button
+          onClick={() => onPick("sandbox")}
+          className="w-full text-left rounded-2xl p-5"
+          style={{ background: CARD, border: `1px solid ${BORDER}` }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-2xl">🧭</span>
+            <span className="font-bold text-lg">自由模式 · 養成沙盒</span>
+          </div>
+          <p className="text-sm opacity-75 leading-relaxed">
+            沒有劇情包袱，純粹自由配點。想速通某種教師人格、實驗各種養成路線、衝傳說級結局——這裡最快、最好重玩。
+          </p>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- 召喚（開場焦點難題） ---------------- */
+function CallScreen({ game, onContinue }: { game: GameState; onContinue: () => void }) {
+  const call = callById(game.call);
+  return (
+    <div className="pt-10">
+      <Scene bg={`/scenes/d${call.relDomain}.png`} badge="這一年的召喚">
+        <Narration>{call.call(game.name)}</Narration>
+      </Scene>
+      <div className="mt-6 rounded-2xl p-5" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <h2 className="font-bold text-lg mb-1">{call.title}</h2>
+        <p className="text-sm opacity-75 leading-relaxed mb-1">{call.who}</p>
+        <p className="text-xs opacity-55 leading-relaxed">
+          這不會改變你的養成方式——你照樣用每一週的取捨變強。但學年末，會特別回頭看你為這件事做了多少。
+        </p>
+      </div>
+      <button onClick={onContinue} className="mt-5 w-full rounded-xl py-3 font-bold text-white" style={{ background: PRIMARY }}>
+        接下這一年
+      </button>
+    </div>
+  );
+}
+
+/* ---------------- 中點危機（嚴酷考驗） ---------------- */
+function OrdealScreen({ game, onNext }: { game: GameState; onNext: () => void }) {
+  const call = callById(game.call);
+  const { tier, outcome } = useMemo(() => ordealResolve(game), [game]);
+  const tierLabel = tier === 2 ? "你穩住了" : tier === 1 ? "勉強撐過" : "這一年的最低點";
+  const tierColor = tier === 2 ? "#3f8f6b" : tier === 1 ? "#c9952b" : "#c75b39";
+  return (
+    <div className="pt-6 pb-12">
+      <Scene bg={`/scenes/d${call.relDomain}.png`} badge="中點危機">
+        <Narration>{call.ordeal}</Narration>
+      </Scene>
+      <div className="mt-5 rounded-2xl p-4 mb-3" style={{ background: "#f6ecd9", border: `1px solid ${BORDER}` }}>
+        <p className="text-sm leading-relaxed opacity-90">{call.mentor}</p>
+      </div>
+      <div className="text-center mb-2">
+        <span className="inline-block text-sm font-bold px-4 py-1.5 rounded-full text-white" style={{ background: tierColor }}>
+          {tierLabel}
+        </span>
+      </div>
+      <p className="text-sm leading-relaxed opacity-90 text-center px-2 mb-5">{outcome}</p>
+      <button onClick={onNext} className="w-full rounded-xl py-3 font-bold text-white" style={{ background: PRIMARY }}>
+        撐著走下去
+      </button>
+    </div>
+  );
+}
+
+/* ---------------- 高潮（學年末見真章） ---------------- */
+function ClimaxScreen({ game, onNext }: { game: GameState; onNext: () => void }) {
+  const call = callById(game.call);
+  const { tier, text } = useMemo(() => climaxResolve(game), [game]);
+  const tone = tier === 2 ? "#3f8f6b" : tier === 1 ? "#c9952b" : "#a0563b";
+  return (
+    <div className="pt-6 pb-12">
+      <Scene bg={`/scenes/d${call.relDomain}.png`} badge="學年末 · 見真章" />
+      <h2 className="text-xl font-extrabold text-center mt-5 mb-1">{call.title}</h2>
+      <div className="text-center mb-3">
+        <span className="inline-block text-xs px-3 py-1 rounded-full text-white" style={{ background: tone }}>
+          {tier === 2 ? "你接住了" : tier === 1 ? "留下微光" : "未竟之事"}
+        </span>
+      </div>
+      <p className="text-sm leading-relaxed opacity-90 text-center px-2 mb-6">{text}</p>
+      <button onClick={onNext} className="w-full rounded-xl py-3 font-bold text-white" style={{ background: PRIMARY }}>
+        看這一年的我，成了什麼樣的老師
+      </button>
     </div>
   );
 }
@@ -637,6 +800,13 @@ function EndingView({ game, onRestart }: { game: GameState; onRestart: () => voi
       <Section title={`能力傾向（${ability.label}）`} body={ability.career} accent />
       <Section title="要小心的地方" body={ending.trap} />
       <Section title="給你的真心話" body={ending.truth} accent />
+
+      {game.mode === "story" && (
+        <div className="rounded-2xl p-4 mb-3" style={{ background: "#fbf2e2", border: `1px solid ${PRIMARY}55` }}>
+          <h3 className="font-bold text-sm mb-1" style={{ color: PRIMARY }}>帶仙丹歸來</h3>
+          <p className="text-sm leading-relaxed opacity-90">{returnLine(game)}</p>
+        </div>
+      )}
 
       <button onClick={share} className="mt-2 w-full rounded-xl py-3 font-bold" style={{ background: "#fff", color: PRIMARY, border: `2px solid ${PRIMARY}` }}>
         {shared ? "✓ 已複製，去貼給朋友" : "📣 分享我的結局"}
