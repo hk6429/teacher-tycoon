@@ -186,6 +186,7 @@ export default function Page() {
   const [game, setGame] = useState<GameState | null>(null);
   const [screen, setScreen] = useState<Screen>("title");
   const [kp, setKp] = useState<string | null>(null);
+  const [intro, setIntro] = useState(true);
 
   useEffect(() => {
     const saved = loadGame();
@@ -241,6 +242,8 @@ export default function Page() {
     setScreen(isFinished(game) ? "ending" : "hub");
   }
 
+  if (intro) return <Intro onDone={() => setIntro(false)} />;
+
   return (
     <main className="mx-auto w-full max-w-md px-4 pb-16" style={{ color: INK }}>
       {screen === "title" && <Title onStart={() => setScreen("setup")} hasSave={!!game} onResume={() => setScreen(isFinished(game!) ? "ending" : "hub")} />}
@@ -252,6 +255,30 @@ export default function Page() {
       {screen === "result" && game && <Result game={game} onNext={afterResult} />}
       {screen === "ending" && game && <EndingView game={game} onRestart={reset} />}
     </main>
+  );
+}
+
+/* ---------------- 開場片頭 ---------------- */
+function Intro({ onDone }: { onDone: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+      <video
+        src="/intro.mp4"
+        autoPlay
+        muted
+        playsInline
+        onEnded={onDone}
+        onError={onDone}
+        className="max-h-full max-w-full"
+      />
+      <button
+        onClick={onDone}
+        className="absolute bottom-6 right-6 rounded-full bg-white/85 px-5 py-2 text-sm font-bold shadow"
+        style={{ color: INK }}
+      >
+        跳過 ▶
+      </button>
+    </div>
   );
 }
 
