@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActionKind, GameState, Question, Stats } from "@/lib/types";
 import { DOMAINS, domainCounts, kpTitle } from "@/lib/domains";
 import { questionsForKP } from "@/lib/questions";
-import { judgeEnding, radarValues, abilityProfile } from "@/lib/endings";
+import { judgeEnding, radarValues, abilityProfile, tendency } from "@/lib/endings";
 import {
   ACTION_DELTAS,
   ACTION_INFO,
@@ -180,7 +180,10 @@ function Radar({ values }: { values: number[] }) {
 }
 
 /* ---------------- 頁面主體 ---------------- */
-type Screen = "title" | "setup" | "hub" | "quiz" | "result" | "ending";
+type Screen = "title" | "setup" | "hub" | "quiz" | "result" | "term" | "ending";
+
+// 期中評語觸發週（每滿一學期看一次暫定走向）
+const TERM_WEEKS = [11, 21, 31];
 
 export default function Page() {
   const [game, setGame] = useState<GameState | null>(null);
@@ -239,7 +242,9 @@ export default function Page() {
 
   function afterResult() {
     if (!game) return;
-    setScreen(isFinished(game) ? "ending" : "hub");
+    if (isFinished(game)) return setScreen("ending");
+    if (TERM_WEEKS.includes(game.week)) return setScreen("term");
+    setScreen("hub");
   }
 
   if (intro) return <Intro onDone={() => setIntro(false)} />;
@@ -253,6 +258,7 @@ export default function Page() {
       )}
       {screen === "quiz" && game && kp && <Quiz kp={kp} onDone={finishQuiz} />}
       {screen === "result" && game && <Result game={game} onNext={afterResult} />}
+      {screen === "term" && game && <TermReview game={game} onNext={() => setScreen("hub")} />}
       {screen === "ending" && game && <EndingView game={game} onRestart={reset} />}
     </main>
   );
@@ -357,7 +363,12 @@ function Hub({
         <h2 className="text-lg font-bold">{game.name}的一學年</h2>
         <button onClick={onReset} className="text-xs opacity-50 hover:opacity-80">重新開始</button>
       </div>
-      <p className="text-xs opacity-60 mb-3">精通 {game.masteredKPs.length} / {TOTAL_KPS} 個專業知識點 · 剩 {Math.max(weeksLeft(game), 0)} 週</p>
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-xs opacity-60">精通 {game.masteredKPs.length} / {TOTAL_KPS} 個知識點 · 剩 {Math.max(weeksLeft(game), 0)} 週</p>
+        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: "#f4ead6", color: "#7a5f3c", border: `1px solid ${BORDER}` }}>
+          傾向：{tendency(game.masteredKPs)}
+        </span>
+      </div>
 
       <div className="rounded-2xl p-4 mb-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
         <StatBars stats={game.stats} />
@@ -576,6 +587,20 @@ function EndingView({ game, onRestart }: { game: GameState; onRestart: () => voi
   const values = radarValues(game.masteredKPs);
   const success = ending.type === "success";
   const legendary = ending.id === "A1";
+  const [shared, setShared] = useState(false);
+
+  function share() {
+    const d = domainCounts(game.masteredKPs);
+    const text = `我在《良師養成記》養成了【${ending.title}】（${ending.id}）\n班${d[0]} 教${d[1]} 親${d[2]} 輔${d[3]} 我${d[4]}　精通 ${game.masteredKPs.length}/${TOTAL_KPS}\n${ending.summary}\n\n你會養成哪種老師？ https://teacher-tycoon.vercel.app`;
+    if (navigator.share) {
+      navigator.share({ text }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(text).then(() => {
+        setShared(true);
+        setTimeout(() => setShared(false), 2200);
+      });
+    }
+  }
 
   return (
     <div className="pt-6 pb-12">
@@ -613,8 +638,40 @@ function EndingView({ game, onRestart }: { game: GameState; onRestart: () => voi
       <Section title="要小心的地方" body={ending.trap} />
       <Section title="給你的真心話" body={ending.truth} accent />
 
+      <button onClick={share} className="mt-2 w-full rounded-xl py-3 font-bold" style={{ background: "#fff", color: PRIMARY, border: `2px solid ${PRIMARY}` }}>
+        {shared ? "✓ 已複製，去貼給朋友" : "📣 分享我的結局"}
+      </button>
       <button onClick={onRestart} className="mt-2 w-full rounded-xl py-3 font-bold text-white" style={{ background: PRIMARY }}>
         再帶一個新班級
+      </button>
+    </div>
+  );
+}
+
+/* ---------------- 期中評語（暫定走向預告） ---------------- */
+function TermReview({ game, onNext }: { game: GameState; onNext: () => void }) {
+  const term = TERM_WEEKS.indexOf(game.week) + 1; // 第幾學期回顧
+  const provisional = useMemo(() => judgeEnding(game.masteredKPs), [game.masteredKPs]);
+  const lean = tendency(game.masteredKPs);
+  const success = provisional.type === "success";
+  return (
+    <div className="pt-6 pb-12 text-center">
+      <Scene bg={`/endings/${provisional.id}.png`} badge={`期中回顧 · 第 ${term} 學期`} />
+      <p className="text-sm opacity-70 mt-5 mb-1">如果這一學年現在就結束，{game.name}會是——</p>
+      <h2 className="text-2xl font-extrabold mb-1">{provisional.title}</h2>
+      <span className="inline-block text-xs px-3 py-1 rounded-full mb-4" style={{ background: success ? "#e7f3ea" : "#f6ecd9", color: INK }}>
+        目前傾向：{lean} · 精通 {game.masteredKPs.length}/{TOTAL_KPS}
+      </span>
+      <div className="rounded-2xl p-4 mb-5 text-left" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <DomainBars masteredKPs={game.masteredKPs} />
+      </div>
+      <p className="text-sm opacity-75 mb-5 px-2">
+        {success
+          ? "走得不錯。剩下的週數，是要再補強弱項、還是把長處磨亮？決定權在你。"
+          : "還有機會翻盤。看看上面哪個面向最弱，接下來幾週補一補，結局會很不一樣。"}
+      </p>
+      <button onClick={onNext} className="w-full rounded-xl py-3 font-bold text-white" style={{ background: PRIMARY }}>
+        繼續下半段
       </button>
     </div>
   );

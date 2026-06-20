@@ -2,8 +2,8 @@ import { ActionKind, GameState, Stats, WeekReport } from "./types";
 import { ALL_KPS, domainOfKp } from "./domains";
 
 export const TOTAL_WEEKS = 40; // 一學年
-export const QUIZ_SIZE = 8; // 每知識點題數
-export const PASS_THRESHOLD = 6; // 答對幾題才精通
+export const QUIZ_SIZE = 6; // 每知識點題數
+export const PASS_THRESHOLD = 4; // 答對幾題才精通（4/6，容許錯一兩題）
 export const TOTAL_KPS = ALL_KPS.length; // 35
 export const STAT_MAX = 100;
 

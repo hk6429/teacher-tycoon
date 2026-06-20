@@ -79,6 +79,21 @@ function pickSuccess(a: Record<AxisKey, number>, total: number): string {
   return `${family}${6 - tier}`;
 }
 
+// 即時傾向：不等學年結束，依目前知識點分布給一個友善的風格標籤
+export function tendency(masteredKPs: string[]): string {
+  const a = axisValues(masteredKPs);
+  const total = masteredKPs.length;
+  if (total < 4) return "還在摸索";
+  const spread = Math.max(a.teach, a.connect, a.grow, a.care / 2);
+  const balanced =
+    a.care >= 6 && a.teach >= 3 && a.connect >= 3 && a.grow >= 3;
+  if (balanced) return "均衡全人型";
+  if (a.care / 2 === spread) return "帶班輔導型";
+  if (a.teach === spread) return "教學型";
+  if (a.connect === spread) return "親師連結型";
+  return "自我永續型";
+}
+
 // 雷達圖資料：五領域值 0-7（畫圖時自行正規化）
 export function radarValues(masteredKPs: string[]): number[] {
   return domainCounts(masteredKPs);
