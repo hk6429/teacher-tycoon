@@ -27,7 +27,34 @@ export default function RootLayout({
       lang="zh-Hant"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="https://visitor-badge.laobi.icu/badge?page_id=hk6429.teacher-tycoon"
+          alt="訪客人數"
+          loading="lazy"
+          style={{
+            position: "fixed",
+            right: 14,
+            bottom: 14,
+            zIndex: 2147483000,
+            borderRadius: 999,
+            boxShadow: "0 2px 10px rgba(0,0,0,.35)",
+          }}
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "window.goatcounter={path:function(p){return location.host+p}}",
+          }}
+        />
+        <script
+          data-goatcounter="https://hk6429.goatcounter.com/count"
+          async
+          src="https://gc.zgo.at/count.js"
+        />
+      </body>
     </html>
   );
 }
