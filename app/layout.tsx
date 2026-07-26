@@ -29,19 +29,10 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         {children}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="https://visitor-badge.laobi.icu/badge?page_id=hk6429.teacher-tycoon"
-          alt="訪客人數"
-          loading="lazy"
-          style={{
-            position: "fixed",
-            right: 14,
-            bottom: 14,
-            zIndex: 2147483000,
-            borderRadius: 999,
-            boxShadow: "0 2px 10px rgba(0,0,0,.35)",
-          }}
+        <script
+          src="https://self-learning-orbit.pages.dev/platform-counter.js?v=1"
+          data-site="teacher-tycoon"
+          defer
         />
         <script
           dangerouslySetInnerHTML={{
